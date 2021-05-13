@@ -9,6 +9,7 @@ DOCKERFILE_PATH=$ROOT_DIR/Dockerfile
 ACK_DIR=$ROOT_DIR/..
 DOCKERFILE=${DOCKERFILE:-"$DOCKERFILE_PATH"}
 LOCAL_MODULES=${LOCAL_MODULES:-"false"}
+USE_RED_HAT_CERT_LABELS=${USE_RED_HAT_CERT_LABELS:-"false"}
 BUILD_DATE=$(date +%Y-%m-%dT%H:%M)
 QUIET=${QUIET:-"false"}
 
@@ -32,6 +33,9 @@ Environment variables:
   QUIET:                            Build controller container image quietly (<true|false>)
                                     Default: false
   LOCAL_MODULES:                    Enables use of local modules during AWS Service controller docker image build
+                                    Default: false
+  USE_RED_HAT_CERT_LABELS:          Adds additional metadata when building the container image to meet Red Hat
+                                    container certification requirements.
                                     Default: false
   AWS_SERVICE_DOCKER_IMG:           Controller container image tag
                                     Default: aws-controllers-k8s:\$AWS_SERVICE-\$VERSION
@@ -81,7 +85,24 @@ if [[ "$LOCAL_MODULES" = "true" ]]; then
   DOCKERFILE="${ROOT_DIR}"/Dockerfile.local
 fi
 
-docker build \
+if [[ $USE_RED_HAT_CERT_LABELS = "true" ]]; then 
+  docker build \
+  --quiet=${QUIET} \
+  -t "${AWS_SERVICE_DOCKER_IMG}" \
+  -f "${DOCKERFILE}" \
+  --build-arg service_alias=${AWS_SERVICE} \
+  --build-arg service_controller_git_version="$SERVICE_CONTROLLER_GIT_VERSION" \
+  --build-arg service_controller_git_commit="$SERVICE_CONTROLLER_GIT_COMMIT" \
+  --build-arg build_date="$BUILD_DATE" \
+  --label name="ACK - Amazon $AWS_SERVICE" \
+  --label vendor="Amazon, Inc." \
+  --label version="$SERVICE_CONTROLLER_GIT_VERSION" \
+  --label release="1" \
+  --label summary="AWS Controllers for Kubernetes - Amazon $AWS_SERVICE Controller" \
+  --label description="This operator will manage Amazon $AWS_SERVICE services from within your cluster." \
+  "${DOCKER_BUILD_CONTEXT}"
+else
+  docker build \
   --quiet=${QUIET} \
   -t "${AWS_SERVICE_DOCKER_IMG}" \
   -f "${DOCKERFILE}" \
@@ -90,6 +111,7 @@ docker build \
   --build-arg service_controller_git_commit="$SERVICE_CONTROLLER_GIT_COMMIT" \
   --build-arg build_date="$BUILD_DATE" \
   "${DOCKER_BUILD_CONTEXT}"
+fi
 
 if [ $? -ne 0 ]; then
   exit 2
